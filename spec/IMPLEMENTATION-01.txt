@@ -1,0 +1,130 @@
+libespnow implementation contract,2026-10-08
+
+PURPOSE / BOUNDARY
+Write a fresh readable C implementation of the ESP32-S3 IDF6.0.3 libespnow
+component. Same public esp_now_* APIs and SDK header; project/component libespnow,
+archive libespnow.a. No novelty names or caller migration. New code0BSD; public
+SDK header copies/excerpts remain Apache2.0 with license. No vendor implementation
+or instruction listings supplied. Supervisor derived the compatibility facts
+below from original executable observations, prior independent comparisons,
+and public interfaces. These are specifications, not code to translate.
+This is a procedural split on a shared filesystem, not a legal certification.
+
+Read PUBLIC SDK esp_now.h and wifi-types-excerpts.txt for interfaces. Header
+comment suggesting250byte send limit is stale for this pinned implementation:
+accept1..1470 bytes. Initial focus is complete functional library, not merely
+fixtures. Provide docs/SEMANTICS.txt explaining state transitions/ownership and
+docs/DEPENDENCIES.txt explaining where lower-level responsibilities reside.
+No claim that this is the entire radio stack. MAC/frame formatting, CCMP air
+protection, channel hardware and PHY remain vendor dependencies for now.
+
+ARCHITECTURE
+Separate readable peer/key/lifecycle logic from IDF6.0.3 ESP32-S3 ABI accesses.
+Private compatibility layout is in ABI-01.txt. Keep literal offsets contained
+in that adapter/header, with static assertions on target. Own host mocks can
+use native pointer sizes; distinguish host logic checks from32-bit ABI checks.
+Use SDK esp_now.h in target builds, owned minimal dependency shims for host
+builds (keep any copied public declarations under their original license).
+Use standard typed structs, named policies, clear helpers, deterministic
+initialization and cleanup. No VM, no executable arrays, no original objects.
+
+STATE / PUBLIC FUNCTIONS
+A recursive mutex protects public operations; its lifetime may span deinit.
+OS allocation/callbacks are provided through the pinned adapter. Initialization
+is idempotent and consults the MAC init flag; only set flag after successful
+registration. Deinit is idempotent, unregisters hooks, removes every peer/key/
+rate, disables wake window, resets counters/list/cursor/callbacks and clears
+init flag. Do not leak allocations on any owned failure path. A fresh init
+sets version2 and default PMK bytes to i*i modulo256, for i=0..15. Default OUI
+18:fe:34. Default wake window65535. OUI survives ordinary deinit/reinit.
+
+All public operations except init/deinit, get_version, set/get_user_oui require
+initialized state. is_peer_exist returnsfalse before init or for NULL. Generic
+lock allocation failure is ESP_ERR_ESPNOW_NO_MEM. get_version/get_user_oui NULL
+output isARG. register callback NULL usesINTERNAL as observed; unregister clears.
+Public errors use SDK values (ESPNOW base0x3064; NOT_INIT0x3065 etc). See header.
+set_user_oui(NULL) should restore default as public API specifies; original
+pinned blob leaves custom OUI unchanged here. Document this deliberate fix.
+Use safe overlap handling for OUI input/output. Do not preserve incidental
+instruction-level load ordering on overlapping buffers.
+
+Peers: insertion-ordered list, at most20 total. Encrypted limit comes from
+SDK configuration, not a hardcoded6. Permit STA0/AP1 only; channel0 means current,
+nonzero channel validated by regulatory helper. Broadcast/multicast peers may
+be plaintext but encrypted multicast is invalid. MAC match uses all6bytes;
+priv pointer copied, not owned. add duplicate=>EXIST; missing lookup/delete/
+modify=>NOT_FOUND. NULL pointers=>ARG after init gate. Get copies all meaningful
+fields; initialize output/padding/unencrypted LMK deterministically. Fetch walks
+unicast peers only, from_head resets cursor, otherwise continues. Deleting the
+cursor target advances it safely. get_peer_num returns total/encrypted counts.
+Modification may change channel/interface/priv/encryption/key while retaining
+list position and rate config. Validate same limits as add. Implement coherent
+failure rollback instead of reproducing partially modified original peers.
+
+Keys: PMK wraps stored LMKs; this is separate from packet CCMP. Exact adapter
+key lifecycle/layout is in ABI-01. Encryption/decryption primitives supplied by
+SDK. Never log PMK/LMK. Reject absent/failing crypto rather than accepting a
+zeroed key. Key-slot allocation checks both interface masks and takes a free
+slot24down to0. FULL if none. Release masks/hardware entries on removal and
+rollback. Reuse slot for same-interface key update when safe; changing interface
+must leave masks coherent. Preserve required driver-visible key fields.
+set_pmk: NULL=>ARG. Define/document safe policy for changing PMK while encrypted
+peers exist (reject with documented error OR rewrap every LMK transactionally);
+do not silently make existing LMKs unreadable. Choose bounded, tested behavior.
+This is an explicit deviation from original blind PMK overwrite. Erase key and
+transient plaintext storage with compiler-resistant clearing when released.
+
+Send(mac,data,len): mac!=NULL requires matching registered peer, data!=NULL,
+len1..1470. Peer channel nonzero must equal home channel, elseCHAN. Delegate
+packet submission to driver; its success queues send, not proof of delivery.
+Caller data needn't remain after return: delegated synchronous submission must
+copy/consume it according to adapter contract. Callback may arrive later and
+borrows packet info only for callback duration. Map driver errors0x101=>NO_MEM,
+0x3004=>IF,-1=>INTERNAL; otherwise propagate. Transmit callback request flag is
+whether application send callback is registered. Per-peer rate passed orNULL.
+Send(NULL,data,len) iterates registered unicast peers (same as fetch), excluding
+multicast. No eligible peers=>NOT_FOUND; stop at first failure (observed outer
+errorINTERNAL); document this behavior despite public docs saying all peers.
+Do not confuse a TX success with a receive callback; preserve asynchronous API.
+
+RX hook forwards borrowed info,data,length when callback registered. TX driver
+hook gets opaque buffer; ignoreNULL or missingdescriptor. Convert via driver
+helper to SDK wifi_tx_info_t, pass status to application callback. Callbacks
+remain on driver task context; do not invent threads/poll APIs. Avoid holding
+new incompatible locks across callbacks or destroying peer storage while driver
+still legitimately borrows it. Document known concurrency constraints/unknowns.
+
+Wake window: when changed, disable previous using pointer to old uint16, update,
+re-enable only when nonzero. Init enables65535; deinit disables. Driver return
+in baseline was ignored; choose explicit documented policy if failing.
+
+Rate API: validate public peer and rate pointer, mode0..6 and rate0..42. Get
+peer, then delegate pinned eligibility checks from RATE-OFFCHANNEL-01. Store
+owned copy only on success; failed updates retain previous config. No claimed
+5GHz/HE hardware support merely because branch validation accepts some values.
+
+Compatibility exports: public22 functions fromesp_now.h; internal21 functions
+mt_init,deinit,register_recv_cb,unregister_recv_cb,register_send_cb,
+unregister_send_cb,send,add_peer,mod_peer,del_peer,get_peer,fetch_peer,
+is_peer_exist,get_peer_info,get_peer_num,get_version,set_pmk,set_wake_window,
+set_user_oui,get_user_oui,set_peer_rate_config. Most internal signatures match
+public arguments without esp_now prefix; mt_get_peer_info(constuint8_t*) returns
+borrowed driver-layout peer pointer orNULL; mt_set_peer_rate_config takes
+(const esp_now_peer_info_t*, const esp_now_rate_config_t*). mt_* helpers do not
+need public mutex/init gating; document internal precondition. Five data exports:
+g_mt,g_mt_version,g_espnow_user_oui,g_espnow_lock,libespnow_reversion_git. Revision
+pointer may point to honest new identifier, not original vendor commit string.
+
+TESTS / BUILD / DELIVERY
+Host tests must exercise public API, driver callbacks, allocations/crypto/slot
+failures, init/deinit idempotence, peer boundaries, mutation rollback, key masks,
+fetch/delete cursor, broadcasts, asynccallbacks, NULL send, lengths250/251/1470,
+wrongchannel/error mappings, PMK policy, rate checks, wake and offchannel inputs.
+Use independent expected semantic assertions, not just snapshots of own state.
+Strict warnings, ASAN/UBSan; leak checking disable only if environment requires.
+Target32-bit offset assertions; supervisor will compile actualSDK and run stock/
+replacement pairings on2S3boards. Host callback/key mocks are not crypto or radio
+proof. Supply Makefile, CMakeLists.txt IDFcomponent, metadata targetesp32s3,
+version0.1.0, LICENSEscope, honest README, semantic/dependency docs, original simple
+example using esp_now.h, provenancehashes, limitations and explicit behavior
+changes. Do not delete any prior artifacts. Do not publish/network/flash.

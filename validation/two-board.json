@@ -1,0 +1,104 @@
+{
+  "status": "pass",
+  "device_boots": 16,
+  "rounds": 8,
+  "payload_lengths": [
+    32,
+    250,
+    251,
+    1470
+  ],
+  "verified_application_deliveries": 272,
+  "wrong_key_rejections": 16,
+  "firmware_checks": 544,
+  "failures": 0,
+  "matrix": [
+    {
+      "a": "reference",
+      "b": "reference",
+      "warm": false,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "reference",
+      "b": "reference",
+      "warm": true,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "source",
+      "b": "reference",
+      "warm": false,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "source",
+      "b": "reference",
+      "warm": true,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "reference",
+      "b": "source",
+      "warm": false,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "reference",
+      "b": "source",
+      "warm": true,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "source",
+      "b": "source",
+      "warm": false,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    },
+    {
+      "a": "source",
+      "b": "source",
+      "warm": true,
+      "a_to_b_plain": 8,
+      "b_to_a_plain": 8,
+      "a_to_b_encrypted": 9,
+      "b_to_a_encrypted": 9,
+      "wrong_key_rejections": 2
+    }
+  ],
+  "both_full_flash_images_restored_verified": true,
+  "calibration_saved_reused_both_boards": true,
+  "host_payload_crc_recomputed": true,
+  "trial_sha256": "eeea84911f1cadd0a7333bfc8743e5d42d465c2607d805d1afb88b221fe82340",
+  "console_receipts_cross_checked": true,
+  "flashed_build_hashes_rechecked": true,
+  "scope": "Bounded bidirectional ESP-NOW interoperability with vendor MAC/PHY and synthetic keys. Receiver compares all bytes; host independently reconstructs payload CRC. No RF-performance, long-duration, replay-resistance, custom-PHY, LR or coexistence proof."
+}

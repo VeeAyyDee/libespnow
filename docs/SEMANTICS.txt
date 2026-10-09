@@ -1,0 +1,123 @@
+libespnow semantic and ownership contract, version 0.1.1
+
+Public operations
+-----------------
+api.c is the public mutex/init boundary. The mutex is created lazily through
+the OS adapter and retained across deinit. Allocation failure returns ESPNOW
+NO_MEM; lock failure (not pdTRUE=1) returns INTERNAL without mutating state.
+Unlock results cannot undo a completed operation and are ignored. First use
+must be serialized externally; concurrent first creation is not supported.
+The OS function table is assumed stable while the library is used.
+
+Except init/deinit/version/OUI, ordinary public APIs gate on the lower MAC's
+init flag before checking arguments. is_peer_exist returns false on any gate
+failure. Off-channel functions use the distinct Wi-Fi initialization gate and
+generic Wi-Fi errors, and do not acquire the ESP-NOW mutex.
+
+Internal mt_* exports implement the same semantic operations without acquiring
+the mutex or applying public initialization gates. Callers must supply external
+serialization and an initialized lifecycle (except mt_init/deinit/version/OUI).
+mt_get_peer_info and the registered key lookup return borrowed driver-layout
+objects. A borrower must not retain these after peer mutation/deletion/deinit.
+mt_set_peer_rate_config takes a public peer-info pointer and config pointer;
+the matching stored peer's fields determine validation.
+
+Initialization is idempotent according to the MAC flag. A successful fresh
+init sets version 2, PMK[i] = i*i modulo 256, installs TX/RX/key hooks, requests
+a 65535 wake window, then sets the flag. TX registration failure returns
+INTERNAL without installing the other hooks or publishing the initialized
+flag. Deinit unregisters hooks before clearing owned peers, keys and rates;
+it disables the wake window, erases state and clears the MAC flag. User OUI
+and mutex persist across deinit. Do not independently change the MAC flag
+while owned state is live.
+
+Peer ownership and transactions
+-------------------------------
+A doubly linked list preserves insertion order. The core owns nodes, key
+objects and copied rate configs. Application priv is copied, never freed.
+Up to 20 peers are allowed. Encrypted capacity is read from the SDK runtime
+configuration, not the public header's historic value 6. Only STA/AP interfaces
+are accepted; regulatory helper approves nonzero channels. Multicast peers
+cannot be encrypted. MAC comparison uses all six bytes.
+
+Add/modify validate and prepare all fallible resources before committing a
+change. Keys require successful wrap crypto. New keys allocate an available
+slot from 24 down to 0 that is free on BOTH interfaces, then reserve only the
+selected interface. Same-interface updates reuse the key object/slot and
+preserve opaque driver fields. Interface changes prepare another free slot
+before releasing the old slot; they may return FULL even if deleting the old
+key first would free a slot. Driver key installation has no result channel in
+the supplied ABI. A failed modification preserves existing channel, interface,
+priv, LMK, encryption and rate fields. Rate replacement allocates its owned
+copy before freeing the previous one; peer modification retains that rate.
+
+Keys are stored as one AES-128-CBC block under PMK with zero IV. The actual
+crypto provider is external. Wrapped LMK is sent to the specified lower key
+installation hook; over-air encryption is that driver's responsibility. Local
+plaintext scratch and freed key storage are cleared through volatile writes.
+Get-peer builds a temporary zero-initialized output, unwraps only when encrypted,
+and publishes it only after successful crypto; failure leaves output untouched.
+Plaintext peers return all-zero LMK. Return structs and rate padding are stable.
+No key bytes are logged.
+
+PMK change is rejected with ARG whenever encrypted count is nonzero. This
+bounded policy prevents orphaning wrapped LMKs without transactional rewrap
+complexity. Caller-owned key input/output buffers remain caller responsibility.
+
+Fetch returns only unicast peers. Successful fetch advances the cursor to the
+next list node; from_head starts again at head. Deleting the cursor node moves
+the cursor to its next node. Failed decrypt leaves it positioned for retry.
+Exhaustion keeps the cursor empty until another from_head call.
+
+Send and callbacks
+------------------
+Send accepts 1..1470 bytes. A specific destination must be a registered peer;
+nonzero peer channel must equal the home channel. The lower driver must copy
+or consume data synchronously; the caller may release its bytes on return.
+NO_MEM 0x101, IF 0x3004 and -1 map to ESPNOW NO_MEM, IF and INTERNAL; other
+statuses propagate. Success only indicates queueing, never delivery.
+NULL destination enumerates unicast peers only, no eligible peer is NOT_FOUND,
+and the first failed send stops iteration with INTERNAL. Earlier sends remain
+queued. Explicit multicast/broadcast destinations can be sent as plaintext.
+
+Driver TX callback ignores NULL buffers and missing descriptors. Otherwise the
+adapter obtains wifi_tx_info_t and forwards its tx_status with borrowed info.
+RX forwards the borrowed SDK info/data/length unchanged. Registration snapshots
+are read without acquiring the public mutex. No polling or worker task is added.
+Callbacks run on the original driver task; they must finish promptly.
+
+The supplied contract does not establish whether the driver retains rate/key/
+peer storage until completion. The implementation retains such storage for the
+peer lifetime, but mutation/deletion can end that lifetime. Therefore callers
+must arrange that outstanding transmission/driver use has quiesced before
+mutating/deleting peers or rates and before deinit. Application callback
+registration/unregistration must also be serialized against active callback
+execution; no cross-core data-race guarantee is made for unsynchronized changes.
+Do not call destructive operations from a driver callback while another driver
+operation legitimately borrows objects. Recursive mutexes only address public
+reentrancy, not driver lifetime or scheduling. These constraints require target
+validation before broad concurrent use; the host mocks cannot establish them.
+
+Wake/OUI/rate/off-channel
+------------------------
+Wake changes disable the prior window via pointer to its old value, update
+stored window, and enable the new one only if nonzero. An unchanged window is
+a no-op. Driver results are ignored as in the specified baseline; public
+success means the configuration request was issued, not confirmed by hardware.
+NULL OUI resets default (intentional fix); memmove handles overlap safely.
+
+Rate validation implements RATE-OFFCHANNEL-01 cumulatively, reads configured
+interface/channel/bandwidth/LR state, and only replaces owned config after all
+checks and allocation succeed. Out-of-range mode/rate returns ARG even for a
+missing peer. The selected interface must enable LR, which also guarantees the
+public at-least-one-interface criterion. Model acceptance is not radio support.
+
+Offchannel_abi.c constructs zeroed fixed little-endian payloads. The driver
+validates generic action/cancellation parameters. Switch data length is uint16
+and is not capped at ESP-NOW's ordinary 1470 bytes. Driver ioctl takes ownership
+of a zeroed allocated request and must finish using payload synchronously;
+switch payload is then freed, ROC payload is stack-owned. Allocation failures
+retain caller op_id; submitted driver results and output op_id are forwarded,
+even when a submitted driver call returns generic NO_MEM. Request/operation
+reserved bytes start at zero. No interpretation of cancellation IDs beyond
+the provided ABI is invented.

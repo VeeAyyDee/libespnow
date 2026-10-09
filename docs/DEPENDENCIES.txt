@@ -1,0 +1,47 @@
+libespnow dependency boundary, version 0.1.1
+
+Portable authored logic: src/core.c (lifecycle/list/keys/send/OUI/wake),
+src/api.c (public locking/gates), src/rate.c (policy). These files do not read
+private SDK byte offsets. include/libespnow_internal.h defines semantic types
+whose target layouts are asserted by src/abi_idf.c.
+
+Pinned adapters: src/abi_idf.c owns OS/crypto/radio global offsets and native
+private helper declarations. src/offchannel_abi.c owns fixed byte layouts for
+ioctl payloads. This separation allows replacing the adapter without rewriting
+peer/key policy. All accessed target layouts are checked against supplied
+32-bit contracts. No actual SDK implementation headers were imported here.
+Target public declarations come from real esp_now.h through REQUIRES esp_wifi.
+Host builds include the supplied public header with minimal host dependency
+shims and native pointers; those layouts are expressly not the target ABI.
+
+Required lower-layer services:
+- g_osi_funcs_p recursive mutex and zeroed allocation/free.
+- MAC initialization flag, TX/RX/key callback registration and unregister.
+- Synchronous data copying/consumption during action-frame submission.
+- Event-buffer descriptor and TX info conversion.
+- Regulatory checks, home/current channel, secondary channel, interface PHY,
+  bandwidth and LR configuration; configured encrypted-peer limit.
+- Both interface key masks and hardware key install/delete. The external ccmp
+  object identifies the cipher to the driver. ic_set_key exposes no failure.
+- wpa_crypto_funcs AES-CBC encrypt/decrypt pointer slots. Null function or
+  nonzero result fails closed. These are wrapping primitives, not a replacement
+  for the hardware/driver's packet CCMP processing.
+- Wake-window configuration; errors ignored by explicit policy.
+- Wi-Fi initialization and synchronous ioctl request ownership/dispatch for
+  off-channel action transmission and remain-on-channel/cancellation.
+
+The SDK still owns radio startup, frames and fragmentation, MAC scheduling,
+CCMP on air, key hardware, power management, regulatory enforcement, PHY and
+802.11 acknowledgement/delivery status. No replacement for those is implied.
+
+CMake's after-project replacement hook updates the existing imported
+esp_wifi_espnow archive location; this preserves the lower stack's dependency
+closure. The source component must participate in the application's link.
+Mutual imported library dependencies make add_dependencies(imported, source)
+invalid for this pinned graph, so the hook does not add that strong edge.
+
+Known integration unknowns: precise lifetime of borrowed key/rate/peer objects
+across asynchronous driver work, callback unregister synchronization across
+cores, and radio acceptance/behavior of every rate/offchannel combination.
+No hidden global fallback, zero-key crypto success, or claimed HE/5GHz support
+is provided. Target link and board pairing tests belong to the supervisor.

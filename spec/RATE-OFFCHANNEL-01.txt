@@ -1,0 +1,51 @@
+Rate and off-channel compatibility contract, 2026-10-08
+Pinned ESP32-S3 IDF6.0.3. Branch acceptance is not proof of hardware capabilities.
+
+Rate public validation: non-NULL MAC/config; mode0..6, rate0..42, peer exists.
+LR mode0 requires rate41 or42, and LR enabled: STA g_wifi_nvs byte0x475,
+AP byte0x511. At least one interface must enable LR for public acceptance;
+selected peer interface must enable it for stored configuration.
+Non-LR: peer interface object must exist, otherwise INTERNAL. Let current_mode
+be interface byte0x168, channel be peer channel or current channel if zero.
+For channel<=14:
+ - requested mode>=3 rejected if current_mode<3;
+ - requested mode3 rejected;
+ - requested mode<3 needs rate<=15; requested mode>=3 needs rate>15.
+For channel>14 (model checking only, NOT S3 5GHz support):
+ - current_mode>=5 with requested mode<3 rejected;
+ - requested mode3 requires rate8..15; requested mode>=4 requires rate>15.
+Current_mode3 with requested mode>=6 rejected.
+Mode5 requires secondary channel nonzero and selected bandwidth setting==2.
+If chm_get_band_from_chan(channel)==1: STA bandwidth byte0x9d / AP0x3fb;
+otherwise STA0x473 / AP0x50a, all in g_wifi_nvs.
+Mode6 with ERSU: reject rates19..23 or >26.
+Mode6 with DCM: reject rate18,26, any outside16..28, or21..23.
+These checks are cumulative. Invalid combination ARG. Keep owned 12-byte copy
+only after all checks/allocation succeed. Preserve previous config on failure.
+
+Off-channel public signatures/types are in esp_now.h and public type excerpt.
+Both functions gate on wifi_init_completed(void), false=>ESP_ERR_WIFI_NOT_INIT
+0x3001. NULL input=>ESP_ERR_INVALID_ARG0x102. Allocation failure=>ESP_ERR_NO_MEM
+0x101. This gate differs from ordinary ESP-NOW initialization gate.
+Switch-channel public fields: type32@0, channel8@4, secondary enum32@8,
+wait_ms32@12, op_id8@16, destination_MAC[6]@17, data_len16@24, data starts@26.
+ROC public fields: type32@0, channel8@4, secondary32@8, wait_ms32@12, op_id8@16.
+
+Switch driver payload: allocate zeroed 48+data_len bytes; destination MAC@4,
+type32@12, channel8@16, secondary32@20, wait_ms32@24, zero32@32,
+output op_id8@36, data_len32@44, data@48. Copy public input fields, submit
+synchronously, copy returned op_id, then free owned payload. Do not impose an
+invented ESP-NOW1470 limit on this driver's generic action-frame operation.
+ROC payload: zeroed 32 bytes (stack okay), type32@4, channel8@8, secondary32@12,
+wait_ms32@16, zero32@20 and28, output op_id8@24.
+
+Common driver ioctl request: zeroed 24 bytes, opcode8@0, handler pointer@4,
+synchronous16@8=1, zero byte10, zero32@12, zero32@16, payload pointer@20.
+Switch opcode0x55, handler wifi_action_tx_process; ROC opcode0x56, handler
+wifi_roc_process. Handlers may be declared void(void), addresses passed only.
+ieee80211_ioctl(request)->int takes ownership/frees request and finishes use
+of payload synchronously. On failed request allocation retain caller's op_id
+and release any owned payload; do not fabricate successful operation result.
+Driver validates type/channel etc. The public API includes cancellation.
+Forward driver status. All reserved bytes initialized; do not recreate original
+uninitialized-stack behavior. Tests may simulate op_id result from driver.

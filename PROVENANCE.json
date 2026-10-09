@@ -1,0 +1,82 @@
+{
+  "component": "libespnow",
+  "version": "0.1.1",
+  "authored_license": "MPL-2.0",
+  "boundary": "Procedural specification/implementation split on shared filesystem; not a legal certification.",
+  "allowed_inputs": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "cb23ce0f53de7ce99816ca10061cd0b1c56f76e3325ba60696b66ffb8680106e"
+    },
+    {
+      "path": "spec/ABI-01.txt",
+      "sha256": "7e778e15ef81530e48d80807167fae62171ffc0583c55032ef434043eeeb4d53"
+    },
+    {
+      "path": "spec/IMPLEMENTATION-01.txt",
+      "sha256": "9f8d7090f781a6cd22250a4a307a3c1ff485386b4ed28fcf072155c05564891b"
+    },
+    {
+      "path": "spec/RATE-OFFCHANNEL-01.txt",
+      "sha256": "526690402fdb53173dc446b2aab40ddadd5b618ae6688237e993533b9992df3c"
+    },
+    {
+      "path": "spec/SUPERVISOR-FEEDBACK-01.txt",
+      "sha256": "f486c770f8307c06e232db1cdd56c3ee9d8fc452b394006c19eea8699639b515"
+    },
+    {
+      "path": "spec/public-sdk/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "spec/public-sdk/esp_now.h",
+      "sha256": "6163bdf241788ba2883d57bf8da981364bd5c183cd3edab28e3d4d285eb03044"
+    },
+    {
+      "path": "spec/public-sdk/wifi-types-excerpts.txt",
+      "sha256": "4cd914431be18b185c0fce3bc5a8f80495d9cebc92b63e2f341ef30753e1aeaf"
+    }
+  ],
+  "public_sdk_license": "Apache-2.0; spec/public-sdk/LICENSE",
+  "adapted_public_declarations": [
+    "tests/host/esp_wifi_types.h"
+  ],
+  "implementation_method": "Original semantic C authored from the supplied specifications and interface declarations. No executable transcription or embedded original objects.",
+  "implementation_author_access": {
+    "original_binaries": false,
+    "disassembly": false,
+    "research_tree": false,
+    "network": false,
+    "hardware": false
+  },
+  "host_tools": "Installed C compiler, CMake, Make, Python, system headers and host sanitizers.",
+  "validation": {
+    "host": "GCC strict warnings, ASan/UBSan and explicit allocation accounting; 4,000 model operations.",
+    "leak_sanitizer": "Disabled only after observed fatal ptrace incompatibility.",
+    "target_and_hardware": "Supervisor owns validation; not performed by implementation author."
+  },
+  "supervisor_validation": {
+    "date": "2026-10-08",
+    "target": "ESP32-S3 / IDF6.0.3",
+    "target_link_and_abi": "pass:43 functions,5 globals, source archive only",
+    "host_suite": "pass, ASan/UBSan, LSan disabled",
+    "radio_receipt": "validation/two-board.json",
+    "supervisor_authored_changes": "Specifications, tests/harness, build-hook strong-edge removal, documentation and packaging. No implementation C edits.",
+    "source_files": {
+      "src/offchannel_abi.c": "a4bf1f5fe45c0436520b132d4acd0e76827bb0103d2917a779624b7b5ee2201c",
+      "src/abi_idf.c": "ee925033bf67b3e9ec8669319f2dcdd898fa671f292a54b291ae2dd95e544ed3",
+      "src/api.c": "20229cbaa1ea4ee08e1b64b0284932314b8291cd6ce46aeee6831bcb08bbf986",
+      "src/core.c": "71eb6b9154f233ac8a30d469a2e3d94dad1fb1edea4b719c5308943c4a30ebd0",
+      "src/rate.c": "864c647f4402706add8039bda98dea52ad8bd5792daf476379eb24beb3cece3b",
+      "include/libespnow_internal.h": "babab37b912d4eff0584a25601be4eb6e2581932efacb6f1d40f12599c91d1ac"
+    }
+  },
+  "license_transition": {
+    "authorization": "User stated libespnow unpublished and explicitly requested replacement license after selecting shared distributed fixes",
+    "previous_private_package": "0.1.0 / 0BSD",
+    "new_package": "0.1.1 / MPL-2.0",
+    "runtime_changes": "SPDX comments only; no functional change",
+    "historical_hashes": "allowed_inputs and supervisor_validation.source_files identify original implementation/tested bytes, before licensing changes",
+    "third_party": "Apache-2.0 public SDK files and adapted declarations unchanged"
+  }
+}

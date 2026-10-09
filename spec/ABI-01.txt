@@ -1,0 +1,94 @@
+Pinned ESP32-S3 ESP-IDF 6.0.3 integration ABI, 2026-10-08
+This is a compatibility specification, not vendor implementation source.
+All sizes/offsets below are BYTES on little-endian 32-bit target. Host logical
+tests may use native pointers, but do not call those host layouts target ABI.
+
+Public SDK layouts (use actual SDK headers on target):
+peer_info size36: MAC[6]@0, LMK[16]@6, channel8@22, interface32@24,
+ encrypt bool@28, priv pointer@32.
+rate_config size12: phymode32@0, rate32@4, ersu bool@8, dcm bool@9.
+TX info size28: destaddr pointer@0, srcaddr pointer@4, interface32@8,
+ frame pointer@12, data_len8@16, rate32@20, tx_status32@24.
+RX info: source address pointer, destination address pointer, rx-control pointer.
+
+Export g_mt: state size60, PMK[16]@0, reserved[12]@16, head pointer@28,
+ tail pointer@32, total signed32@36, encrypted signed32@40, cursor pointer@44,
+ receive callback pointer@48, send callback pointer@52, wake_window16@56.
+Export g_mt_version uint32 initially2. g_espnow_user_oui uint8[3] initially18fe34.
+g_espnow_lock pointer. libespnow_reversion_git pointer to honest version string.
+
+Driver-visible peer node size28: next pointer@0, previous pointer@4,
+ channel8@8, interface8@9, MAC[6]@10, borrowed application priv pointer@16,
+ key pointer@20, owned rate_config pointer@24.
+mt_get_peer_info(MAC) returns borrowed node pointer. External MAC code reads
+this layout and g_mt, so changing these structures requires changing that MAC.
+
+Driver key object size192: index16@0, opaque[158]@2, cipher pointer@160,
+ opaque32@164, wrapped LMK[16]@168, length8@184, cipher_id8@185,
+ hardware_index8@186, reserved[5]@187. Allocate zeroed object; preserve opaque
+live driver fields on an update. Cipher pointer references external symbol ccmp.
+Index and hardware_index identify the same slot. length=16, cipher_id=3.
+LMK wrapping/unwrapping is one AES-128-CBC block with PMK and all-zero IV.
+wpa_crypto_funcs is an external function-pointer table (not a pointer variable);
+encrypt pointer at byte16, decrypt pointer at byte20. Both take
+(const uint8_t *key, uint8_t *iv, uint8_t *inout, size_t bytes), return int,
+0 means success. Protect transient plaintext and fail closed on error.
+Check slot24 down to0; ieee80211_mt_key_is_mask(interface,slot) nonzero means
+occupied. Both interface0 and1 must report free before reservation. Reserve
+with ieee80211_mt_key_set_mask(interface,slot); clear with
+ieee80211_mt_key_clear_mask(interface,slot). These helpers accept two ints.
+Install via ic_set_key(interface, 3, cipher_id, MAC, hardware_index,
+ wrapped_LMK, length, without_pmf, 0). No install result is exposed by this ABI.
+without_pmf is !esp_wifi_sta_pmf_enabled() for STA, !wifi_ap_pmf_enabled() for AP.
+Delete via ic_del_key(hardware_index), then clear appropriate mask.
+These are lower-driver key management hooks, not software packet encryption.
+
+OS adapter global g_osi_funcs_p points to adapter with function slots:
+0x4c recursive_mutex_create(void)->void*
+0x50 mutex_delete(void*)->void
+0x54 mutex_lock(void*)->int; 0x58 mutex_unlock(void*)->int
+0xb0 free(void*)->void
+0x14c log_write(unsigned,const char*,const char*,...)->void
+0x150 log_writev pointer; 0x154 log_timestamp(void)->uint32
+0x168 wifi_malloc(size_t)->void*; 0x16c realloc; 0x170 calloc;
+0x174 wifi_zalloc(size_t)->void*.
+Only needed slots require named typed fields. The adapter may be isolated from
+portable core; target assertions must verify every accessed field. Baseline
+ignores lock return; supervisor will check actual adapter before target run.
+No need to reproduce log formatting or original file/line assertions.
+
+Lifecycle helpers:
+ieee80211_espnow_get_init_flag(void)->int;
+ieee80211_espnow_set_init_flag(int)->void.
+pp_register_tx_cb(handler(void*),7,0)->int; zero succeeds.
+pp_unregister_tx_cb(7)->void.
+register_ieee80211_action_vendor_spec_cb(RX callback)->void;
+unregister_ieee80211_action_vendor_spec_cb(void)->void;
+register_ieee80211_action_vendor_get_key_cb(key_lookup(MAC)->key*)->void;
+unregister_ieee80211_action_vendor_get_key_cb(void)->void.
+esp_wifi_internal_configure_wake_window(int enabled, uint16_t *window)->int.
+TX handler: NULL buffer or NULL pointer at buffer+44 means ignore. Convert using
+ieee80211_get_tx_info_from_eb(buffer, wifi_tx_info_t*); user callback receives
+this temporary info and info.tx_status. RX uses SDK callback signature.
+
+Transmit: ieee80211_send_action_vendor_spec(int interface,const uint8_t *MAC,
+ const uint8_t *data,size_t len,int callback_requested,const rate_config*)->int.
+The lower driver synchronously consumes/copies submitted data. Success means
+queued; callback is later and its arguments are borrowed. rate pointer lifetime
+is peer lifetime (retain owned copy; document asynchronous deletion uncertainty).
+
+Radio context reads must be isolated behind named adapter helpers:
+g_chm is pointer: home channel uint8 at80, secondary-channel uint8 at81.
+chm_get_current_channel(void)->uint8_t*, first byte is current channel.
+ieee80211_regdomain_check_channel(uint8_t)->int, nonzero permits channel.
+g_wifi_menuconfig is external byte array with encrypted-peer limit signed32@80.
+g_ic is external byte array: STA interface pointer@16, AP pointer@20. If present,
+interface current PHY mode byte@0x168.
+g_wifi_nvs is pointer to byte array; radio settings offsets in rate spec.
+chm_get_band_from_chan(uint8_t)->int.
+
+Drop-in acceptance: application uses esp_now.h and esp_now_* unchanged.
+New component libespnow must ensure vendor esp_wifi_espnow archive is replaced,
+not merely add a second competing archive. Provide documented build hook with
+IDF target checks; supervisor will verify link map and all required exports.
+No absolute developer paths in release CMake/examples.

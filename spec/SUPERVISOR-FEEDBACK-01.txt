@@ -1,0 +1,16 @@
+Permitted supervisor feedback, 2026-10-08:
+Actual SDK mutex adapter mutex_lock and mutex_unlock return FreeRTOS pdTRUE=1
+on success and zero on failure. Handle lock failure consistently.
+Pinned CMake: SDK add_prebuilt_library(esp_wifi_espnow PATH/libespnow.a REQUIRES
+esp_wifi) creates IMPORTED_LOCATION original archive. All sibling
+esp_wifi_{core,mesh,net80211,pp,smartconfig,wapi} targets put each other in
+INTERFACE_LINK_LIBRARIES, and __idf_esp_wifi PUBLIC links all. A replacement
+sets IMPORTED_LOCATION after project(). Set a concrete replacement archive path
+and add_dependencies(esp_wifi_espnow component_target), retaining interface deps.
+Correction after actual SDK configure: add_dependencies(esp_wifi_espnow,
+source_component) introduces a strong cycle through mutual imported archive
+links. Supervisor removed that line from cmake/replace_vendor_archive.cmake.
+Ensure source component is selected via REQUIRES or COMPONENTS; setting only
+EXTRA_COMPONENT_DIRS is insufficient when COMPONENTS is restricted.
+Actual target compilation reached ABI assertions successfully. Offchannel source
+needed the Wi-Fi NOT_INIT error value explicitly; fixed from the supplied spec.

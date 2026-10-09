@@ -1,0 +1,8 @@
+2026-10-08 user instruction supersedes initial specification licensing:
+libespnow is unpublished. Use MPL-2.0 for original implementation files and the
+new 0.1.1 release package. The user wants modifications to distributed covered
+library files available to recipients. Keep third-party SDK declarations and
+adapted public types under Apache-2.0. Do not dual-license with a permissive
+alternative that would let recipients bypass source-sharing conditions.
+This changes SPDX comments, license/metadata/documentation, not runtime logic.
+Historical implementation/test hashes remain recorded in PROVENANCE.json.

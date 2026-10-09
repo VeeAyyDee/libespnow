@@ -1,0 +1,7 @@
+version: "0.1.1"
+description: "Original ESP-NOW implementation for pinned ESP32-S3 ESP-IDF 6.0.3 ABI"
+license: "MPL-2.0"
+targets:
+  - esp32s3
+dependencies:
+  idf: "==6.0.3"

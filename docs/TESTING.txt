@@ -1,0 +1,37 @@
+Host validation recorded 2026-10-08
+
+Command: ASAN_OPTIONS=detect_leaks=0 make test
+Result: strict GCC 13.3 build and ASan/UBSan semantic assertions passed.
+The initial unmodified make test reached LeakSanitizer's fatal ptrace check.
+This is why leak detection was disabled for subsequent runs; no other
+sanitizer was disabled. The test allocator tracks live allocations and checks
+zero live owned allocations after teardown and injected failures. Before key
+objects are freed, it also checks every key-object byte has been erased. The mutex
+mock uses a static token, modeling the intentionally retained OS mutex.
+
+Focused cases: init idempotence, init-registration failure, mutex allocation
+and lock failure, public initialization precedence, NULL outputs/callbacks,
+20-peer bound, runtime 17-encrypted bound, all-six-byte MAC distinctions,
+regulatory/interface rejection, duplicate/missing peer statuses, deterministic
+plain LMK, borrowed priv, fetch order and deletion of cursor target, multicast
+exclusion/encrypted rejection, key slot masks on both interfaces, same-interface
+key reuse preserving opaque fields, interface transition rollback, missing/
+failing crypto and absent cipher, allocation failure for node/key/rate/request/
+payload, PMK rejection policy, callback registration/forwarding and null TX
+inputs, asynchronous send-vs-receive separation, lengths 250/251/1470, caller
+buffer consumption, error mappings, partial NULL-send failure, wrong channel,
+OUI persistence/reset/overlap, wake sequencing and ignored driver errors,
+rate policy branches (including ERSU/DCM range sweeps), Wi-Fi-specific
+initialization gate, offchannel data beyond 1470, zeroed payload/request
+reserved fields, driver op_id and status propagation, cancellation forwarding.
+
+Independent model: 4,000 seeded add/modify/delete operations over 24 candidate
+addresses maintain expected peer content, insertion identity and presence in a
+separate fixed array. Each operation checks public outputs, total/encrypted
+counts, unicast fetch order, failed crypto rollback and both interface masks.
+This is not an oracle for unidentified vendor behavior, only the written spec.
+
+Limits: artificial reversible XOR test double is NOT AES. No host result is
+crypto/radio interoperability evidence. Native host struct sizes intentionally
+differ from 32-bit target. Target assertions and actual SDK link are reviewed
+by supervisor; no hardware was accessed from the implementation task.

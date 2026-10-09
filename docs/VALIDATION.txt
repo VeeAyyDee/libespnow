@@ -1,0 +1,29 @@
+Supervisor validation, 2026-10-08
+
+Target: ESP32-S3, ESP-IDF6.0.3. No other SDK/chip ABI is claimed.
+- All 43 required original function exports and all 5 shared data symbols present;
+  global sizes and public/private target offsets checked. Link maps select our
+  source archive; no original ESP-NOW archive member is linked.
+- The included basic example builds with the ordinary esp_now.h application API.
+- Host suite passes strict warnings and ASan/UBSan, including 4,000 modeled peer
+  operations and targeted allocation, crypto, callback, key-slot and rate cases.
+  LSan unavailable under tracing; owned-allocation counters also checked.
+- Independent two-board matrix: stock/stock, source/stock, stock/source,
+  source/source; cold empty NVS and warm retained NVS for each pairing.
+  272 delivered payloads checked byte-for-byte, including 144 encrypted;
+  lengths 32, 250, 251, 1470. Host separately recomputed payload CRCs and checked
+  console receipts, build hashes and snapshot provenance.
+- 16 wrong-key negatives produced no application receive callback, bounded by
+  working matching-key sends. TX success alone was not accepted as delivery.
+- 544 firmware checks, 0 failures. PHY calibration saved/reused on both boards.
+  Both current original 16 MiB flash snapshots restored and verified, then reset.
+
+The original backup guard caught changed UART mapping and a stale flash snapshot
+before any test writes. New private current snapshots were verified before use;
+old backups were preserved. No backups/firmware/private logs are in this package.
+
+This is bounded interoperability, not full semantic/timing equivalence, sustained
+concurrency validation, all rate/offchannel combinations, LR/custom-PHY,
+coexistence or RF-performance measurement. SDK MAC/PHY and packet crypto remain.
+Intentional error-path/PMK/OUI changes and unknown driver borrow lifetimes are
+explicit in README.md and SEMANTICS.txt. Full table is validation/two-board.json.
